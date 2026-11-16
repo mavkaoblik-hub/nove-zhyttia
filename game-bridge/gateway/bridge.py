@@ -2,12 +2,15 @@
 import argparse, base64, contextlib, hashlib, hmac, json, os, re, secrets, sqlite3, time, threading
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 ACTIONS = {'system.health','blender.version','godot.version','workspace.status',
  'workspace.stage_revision','blender.scene.inspect','blender.render','blender.export_gltf',
  'blender.run_approved_script','godot.project.inspect','godot.project.import',
- 'godot.project.validate','godot.tests.headless','godot.export','artifact.upload','job.cancel'}
+ 'godot.project.validate','godot.tests.headless','godot.export','artifact.upload','job.cancel','files.push','files.pull','files.publish',
+ 'workspace.results','gui.blender.open','gui.godot.editor','gui.godot.run','pipeline.run'}
 TERMINAL = {'succeeded','failed','cancelled','expired'}
 def encoded(x): return json.dumps(x, separators=(',',':'), ensure_ascii=False).encode()
 def digest(b): return hashlib.sha256(b).hexdigest()
@@ -26,6 +29,8 @@ class Bridge:
    CREATE TABLE IF NOT EXISTS audit(seq INTEGER PRIMARY KEY,at INTEGER,actor TEXT,event TEXT,job TEXT);
    CREATE TABLE IF NOT EXISTS artifacts(job TEXT,name TEXT,sha256 TEXT,size INTEGER,PRIMARY KEY(job,name));
    PRAGMA user_version=1;''')
+  from transfers import initialize
+  initialize(self)
  @contextlib.contextmanager
  def db(self):
   c=sqlite3.connect(self.root/'queue.sqlite',timeout=10);c.row_factory=sqlite3.Row
@@ -57,6 +62,9 @@ class Bridge:
    c.execute('BEGIN IMMEDIATE');self.sweep(c)
    if owner and path=='/v1/status' and method=='GET':
     return {'version':VERSION,'devices':[dict(x) for x in c.execute('SELECT * FROM devices')],'jobs':[dict(x) for x in c.execute('SELECT id,device,state,attempts FROM jobs ORDER BY rowid DESC LIMIT 100')]}
+   if owner and path=='/v1/transfers' and method=='POST':
+    from transfers import operate
+    return operate(self,c,who,role,data)
    if owner and path=='/v1/jobs' and method=='POST':
     required={'job_id','device_id','action','arguments','created_at','expires_at','requested_by','revision_sha','idempotency_key','approval_required'}
     if set(data)!=required:raise ValueError('job fields')
@@ -86,7 +94,7 @@ class Bridge:
     token=secrets.token_hex(32)
     c.execute("UPDATE jobs SET state='leased',lease=?,deadline=?,attempts=attempts+1 WHERE id=?",(token,now+90,r['id']))
     return {'job':json.loads(r['body']),'lease':token}
-   m=re.fullmatch(r'/v1/jobs/([a-zA-Z0-9_-]{1,80})(?:/(progress|result|cancel|artifacts))?',path)
+   m=re.fullmatch(r'/v1/jobs/([a-zA-Z0-9_-]{1,80})(?:/(progress|result|cancel|artifacts|transfer))?',path)
    if not m:raise ValueError('unknown route')
    jid,op=m.groups();r=c.execute('SELECT * FROM jobs WHERE id=?',(jid,)).fetchone()
    if not r:raise ValueError('unknown job')
@@ -98,6 +106,9 @@ class Bridge:
     c.execute('INSERT INTO audit(at,actor,event,job) VALUES(?,?,?,?)',(now,who,'cancel',jid));return {'state':'cancelled' if r['state'] not in TERMINAL else r['state']}
    if owner or method!='POST' or not hmac.compare_digest(str(data.get('lease','')),r['lease'] or '!'):raise PermissionError('lease')
    if r['state'] in TERMINAL:return {'state':r['state']}
+   if op=='transfer':
+    from transfers import operate
+    return operate(self,c,who,role,data,r)
    if op=='progress':
     c.execute("UPDATE jobs SET state='running',deadline=? WHERE id=?",(now+90,jid))
     c.execute('UPDATE devices SET heartbeat=? WHERE id=?',(now,device));return {'state':'running'}

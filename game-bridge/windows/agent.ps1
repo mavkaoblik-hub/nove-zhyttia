@@ -1,6 +1,11 @@
 ﻿param([string]$ConfigPath=(Join-Path $PSScriptRoot 'config.json'),[switch]$Once)
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'hash.ps1')
+. (Join-Path $PSScriptRoot 'transfer.ps1')
+. (Join-Path $PSScriptRoot 'approval.ps1')
+. (Join-Path $PSScriptRoot 'results.ps1')
+. (Join-Path $PSScriptRoot 'process-output.ps1')
+. (Join-Path $PSScriptRoot 'pipeline.ps1')
 $ErrorActionPreference='Stop'
 $cfg=Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($cfg.gateway -ne 'http://127.0.0.1:18774') { throw 'Only the local pinned SSH forwarding endpoint is permitted' }
@@ -49,7 +54,8 @@ function Upload([string]$File) {
  $b=[IO.File]::ReadAllBytes($f.FullName)
  Request ('/v1/jobs/'+$job.job_id+'/artifacts') @{lease=$lease;name=$f.Name;sha256=(HashBytes $b);content=[Convert]::ToBase64String($b)} | Out-Null
 }
-function RunTool([string]$Exe,[string[]]$Arguments) {
+function RunTool([string]$Exe,[string[]]$Arguments,[string]$LogName='tool.log') {
+ AssertNoInteractiveConflict $Exe $Arguments $PSScriptRoot
  if(-not (Test-Path -LiteralPath $Exe -PathType Leaf)){throw 'Configured tool missing'}
  # Argument values are fixed or generated paths. Refuse quotes/newlines before Windows quoting.
  foreach($a in $Arguments){if($a -match '["\r\n]'){throw 'Unsafe argument'}}
@@ -58,7 +64,7 @@ function RunTool([string]$Exe,[string[]]$Arguments) {
  $psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.RedirectStandardOutput=$true;$psi.RedirectStandardError=$true;$psi.WorkingDirectory=$out
  $psi.StandardOutputEncoding=$utf8;$psi.StandardErrorEncoding=$utf8
  $p=New-Object Diagnostics.Process;$p.StartInfo=$psi
- $null=$p.Start();$stdout=$p.StandardOutput.ReadToEndAsync();$stderr=$p.StandardError.ReadToEndAsync();$watch=[Diagnostics.Stopwatch]::StartNew();$last=0
+ $null=$p.Start();$stdout=[MaVkaOutputReader]::DrainAsync($p.StandardOutput,48000);$stderr=[MaVkaOutputReader]::DrainAsync($p.StandardError,12000);$watch=[Diagnostics.Stopwatch]::StartNew();$last=0
  try {
   while(-not $p.WaitForExit(500)){
    if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'STOP')){throw 'Emergency stop'}
@@ -75,8 +81,9 @@ function RunTool([string]$Exe,[string[]]$Arguments) {
  # Bounded artifact retention; tools themselves are trusted reviewed executables/scripts.
  $text=$stdout.Result+"`n"+$stderr.Result
  if($text.Length -gt 60000){$text=$text.Substring(0,60000)}
- [IO.File]::WriteAllText((Join-Path $out 'tool.log'),$text,$utf8);Upload (Join-Path $out 'tool.log')
+ [IO.File]::WriteAllText((Join-Path $out $LogName),$text,$utf8);Upload (Join-Path $out $LogName)
  if($exit -ne 0){throw ('Tool exit '+$exit)}
+ if([IO.Path]::GetFileName($Exe) -like 'Godot*' -and (TestGodotError $text)){throw ('Godot reported an error; see '+$LogName)}
  return @{exit_code=$exit;elapsed_seconds=$watch.Elapsed.TotalSeconds;output=$text.Substring(0,[Math]::Min(3000,$text.Length))}
 }
 $mutex=New-Object Threading.Mutex($false,('Local\MaVkaGameBridge_'+$cfg.device_id))
@@ -85,23 +92,23 @@ try {
  do {
   if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'STOP')){break}
   try {
-   Request '/v1/heartbeat' @{version='1.0.0'} | Out-Null
+   Request '/v1/heartbeat' @{version='1.1.0'} | Out-Null
    [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'connection.json'),(@{heartbeat=[DateTime]::UtcNow.ToString('o')}|ConvertTo-Json),$utf8)
    $claim=Request '/v1/lease' @{}
    if($null -eq $claim.job){if($Once){break};Start-Sleep -Seconds 5;continue}
    $job=$claim.job;$lease=$claim.lease
    Journal 'leased' $job.job_id $job.action
-   [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'active.json'),(@{job_id=$job.job_id;action=$job.action}|ConvertTo-Json),$utf8)
+   WriteActiveState @{job_id=$job.job_id;action=$job.action;phase='leased'}
    $receipt=SafePath (Join-Path $PSScriptRoot 'receipts') ($job.job_id+'.json')
    if(Test-Path -LiteralPath $receipt){throw 'Local receipt exists: refusing duplicate execution'}
    [IO.File]::WriteAllText($receipt,($job|ConvertTo-Json -Depth 20),$utf8)
    $out=SafePath (Join-Path $PSScriptRoot 'output') $job.job_id;New-Item -ItemType Directory -Path $out | Out-Null
-   $result=@{};$state='succeeded'
+   $result=@{};$state='succeeded';$approvalInfo=@{mode='not_required'}
    try {
     if($job.device_id -ne $cfg.device_id -or $job.expires_at -lt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()){throw 'Device or expiry mismatch'}
     if($job.revision_sha -notmatch '^[a-f0-9]{40}$'){throw 'Invalid revision'}
     if((Get-PSDrive -Name ([IO.Path]::GetPathRoot($out).Substring(0,1))).Free -lt 2GB){throw 'Disk reserve'}
-    $safe=@('system.health','blender.version','godot.version','workspace.status')
+    $safe=@('system.health','blender.version','godot.version','workspace.status','workspace.results')
     if($job.action -notin $safe){
      if(-not(TestProjectAccess $cfg)){throw 'Project access denied; enable/select the project in MaVka Game Bridge'}
      if($cfg.project_id -notmatch '^[a-f0-9]{32}$'){throw 'Project ID'}
@@ -110,30 +117,25 @@ try {
      $null=SafePath $cfg.source 'project.godot'
     }
     if($job.approval_required -or $job.action -notin $safe){
-     $approval=SafePath (Join-Path $PSScriptRoot 'approvals') ($job.job_id+'.sha256')
-     $expected=HashBytes ([IO.File]::ReadAllBytes($receipt))
      Write-Host ('Waiting for local approval: '+$job.job_id)
-     $approvalDeadline=[DateTime]::UtcNow.AddMinutes(5)
-     while(-not(Test-Path -LiteralPath $approval)){
-      if([DateTime]::UtcNow -gt $approvalDeadline -or (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'STOP'))){throw 'Approval timeout/stopped'}
-      if(IsCancelled){throw 'Local cancellation'}
-      $pending=Request ('/v1/jobs/'+$job.job_id+'/progress') @{lease=$lease}
-      if($pending.state -ne 'running'){throw 'Cancelled'}
-      Start-Sleep -Seconds 5
-     }
-     if((Get-Content -LiteralPath $approval -Raw -Encoding UTF8).Trim() -ne $expected){throw 'Approval hash mismatch'}
+     $approvalInfo=WaitLocalApproval $receipt
     }
     $confirmed=Request ('/v1/jobs/'+$job.job_id+'/progress') @{lease=$lease}
     if($confirmed.state -ne 'running'){throw 'Cancelled before execution'}
     switch -Exact ($job.action) {
-     'system.health' {$result=@{agent='1.0.0';powershell=$PSVersionTable.PSVersion.ToString();os=[Environment]::OSVersion.VersionString;blender_present=(Test-Path -LiteralPath $cfg.blender);godot_present=(Test-Path -LiteralPath $cfg.godot);free_bytes=(Get-PSDrive -Name ([IO.Path]::GetPathRoot($out).Substring(0,1))).Free}}
+     'system.health' {$result=@{agent='1.1.0';powershell=$PSVersionTable.PSVersion.ToString();os=[Environment]::OSVersion.VersionString;blender_present=(Test-Path -LiteralPath $cfg.blender);godot_present=(Test-Path -LiteralPath $cfg.godot);free_bytes=(Get-PSDrive -Name ([IO.Path]::GetPathRoot($out).Substring(0,1))).Free}}
      'blender.version' {$result=RunTool $cfg.blender @('--background','--factory-startup','--disable-autoexec','--version')}
      'godot.version' {$result=RunTool $cfg.godot @('--version')}
      'workspace.status' {$access=TestProjectAccess $cfg;$present=$false;if($access){$present=Test-Path -LiteralPath (Join-Path $cfg.source 'project.godot')};$result=@{project_access=$access;source_project_present=$present}}
+     'workspace.results' {$result=@{entries=@(GetResultCatalog $cfg $PSScriptRoot|ForEach-Object {@{result_id=$_.result_id;display=$_.display;kind=$_.kind;project_id=$_.project_id;sha256=$_.sha256}})}}
+     'gui.blender.open' {$result=OpenRemoteResult 'blender'}
+     'gui.godot.editor' {$result=OpenRemoteResult 'editor'}
+     'gui.godot.run' {$result=OpenRemoteResult 'run'}
      'workspace.stage_revision' {
       $dest=SafePath $stageRoot $job.revision_sha
       if(Test-Path -LiteralPath $dest){throw 'Immutable staging already exists'}
-      if(-not(Test-Path -LiteralPath (Join-Path $cfg.source 'project.godot'))){throw 'Source project.godot missing'}
+      $project=@($cfg.projects|Where-Object {$_.id -eq $cfg.project_id})[0]
+      if(($project.PSObject.Properties.Name -notcontains 'kind' -or $project.kind -ne 'assets') -and -not(Test-Path -LiteralPath (Join-Path $cfg.source 'project.godot'))){throw 'Source project.godot missing'}
       $files=@(Get-ChildItem -LiteralPath $cfg.source -Force -Recurse)
       if($files|Where-Object {$_.Attributes -band [IO.FileAttributes]::ReparsePoint}){throw 'Source reparse point denied'}
       if(($files|Where-Object {-not $_.PSIsContainer}|Measure-Object Length -Sum).Sum -gt 1GB){throw 'Snapshot quota'}
@@ -158,6 +160,10 @@ try {
       $result=RunTool $cfg.blender @('--background','--factory-startup','--disable-autoexec','--python',$script,'--',$scene,$out)
       Upload (Join-Path $out 'scene.json')
      }
+     'files.push' {$result=PushProjectFiles}
+     'files.pull' {$result=PullProjectFiles}
+     'files.publish' {$result=PublishProjectFiles}
+     'pipeline.run' {$result=RunDevelopmentPipeline}
      {$_ -in @('blender.run_approved_script','godot.tests.headless')} {
       $id=[string]$job.arguments.script_id
       $scripts=@($cfg.approved_scripts|Where-Object {$_.id -eq $id -and $_.revision_sha -eq $job.revision_sha -and $_.action -eq $job.action})
@@ -208,8 +214,10 @@ try {
      default {throw 'Action not enabled in this agent release; denied'}
     }
    }catch{$state=if($_.Exception.Message -eq 'Local cancellation'){'cancelled'}else{'failed'};$result=@{error=$_.Exception.Message}}
-   Request ('/v1/jobs/'+$job.job_id+'/result') @{lease=$lease;state=$state;result=$result}|Out-Null
-   [IO.File]::WriteAllText((Join-Path $out 'result.json'),(@{state=$state;result=$result}|ConvertTo-Json -Depth 10),$utf8)
+   $result['approval']=$approvalInfo
+   $final=Request ('/v1/jobs/'+$job.job_id+'/result') @{lease=$lease;state=$state;result=$result}
+   if($final.state -in @('cancelled','expired')){$state=$final.state}
+   [IO.File]::WriteAllText((Join-Path $out 'result.json'),(@{state=$state;result=$result;project_id=$cfg.project_id}|ConvertTo-Json -Depth 10),$utf8)
    Write-Host ($job.job_id+' '+$state)
    Journal $state $job.job_id $job.action
    Remove-Item -LiteralPath (Join-Path $PSScriptRoot 'active.json') -Force -ErrorAction SilentlyContinue

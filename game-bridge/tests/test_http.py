@@ -15,7 +15,7 @@ class HTTP(unittest.TestCase):
    stamp=str(int(time.time()));nonce=secrets.token_hex(16)
    h={'X-Principal':'owner','X-Time':stamp,'X-Nonce':nonce,'X-Signature':signature(self.key,'GET','/v1/status',stamp,nonce,b'')}
    r=urllib.request.Request(url+'/v1/status',headers=h)
-   with urllib.request.urlopen(r) as response:self.assertEqual(json.load(response)['version'],'1.0.0')
+   with urllib.request.urlopen(r) as response:self.assertEqual(json.load(response)['version'],'1.1.0')
    with self.assertRaises(urllib.error.HTTPError) as e:urllib.request.urlopen(r)
    self.assertEqual(e.exception.code,403)
    e.exception.close()

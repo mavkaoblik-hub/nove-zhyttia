@@ -1,0 +1,21 @@
+[Unit]
+Description=Private MaVka Game Bridge snapshot
+After=mavka-game-bridge.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /opt/mavka-game-bridge/maintenance/1.1.0/backup.py create --prune
+UMask=0077
+Nice=15
+CPUQuota=25%
+MemoryMax=256M
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/backups/mavka-game-bridge /var/lib/mavka-game-bridge
+

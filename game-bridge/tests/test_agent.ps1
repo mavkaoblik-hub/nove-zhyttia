@@ -2,6 +2,35 @@
 $root=Split-Path -Parent $PSScriptRoot
 $count=0
 . (Join-Path $root 'windows\hash.ps1')
+. (Join-Path $root 'windows\approval.ps1')
+. (Join-Path $root 'windows\process-output.ps1')
+$large=[Text.Encoding]::UTF8.GetBytes(('x'*200000));$memory=New-Object IO.MemoryStream(,$large);$reader=New-Object IO.StreamReader($memory)
+try{$bounded=[MaVkaOutputReader]::DrainAsync($reader,1000).GetAwaiter().GetResult();if($bounded.Length -ne 1000 -or $memory.Position -ne $memory.Length){throw 'Output drain is unbounded or incomplete'};$count++}finally{$reader.Dispose();$memory.Dispose()}
+if(-not(TestGodotError 'SCRIPT ERROR: invalid script') -or (TestGodotError 'WARNING: optional texture missing')){throw 'Godot error detection'};$count++
+$utf8=New-Object Text.UTF8Encoding($false)
+$stateFile=Join-Path $PSScriptRoot ('state-'+[Guid]::NewGuid().ToString('N')+'.json')
+try{
+ WriteActiveState @{phase='first'} $stateFile
+ WriteActiveState @{phase='second'} $stateFile
+ if((Get-Content -LiteralPath $stateFile -Raw|ConvertFrom-Json).phase -ne 'second'){throw 'Atomic state replace failed'};$count++
+}finally{foreach($suffix in @('','.previous','.tmp')){Remove-Item -LiteralPath ($stateFile+$suffix) -Force -ErrorAction SilentlyContinue}}
+$policy=[pscustomobject]@{enabled=$true;project_id=('a'*32);delay_seconds=15}
+$autoCfg=[pscustomobject]@{project_id=('a'*32);smoke_sha256=(Get-BridgeFileHash -LiteralPath (Join-Path $root 'windows\smoke.py')).Hash}
+$task=[pscustomobject]@{action='workspace.stage_revision'}
+if(-not(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows'))){throw 'Reviewed staging should be eligible'};$count++
+foreach($action in @('files.push','files.pull','godot.export','blender.run_approved_script','shell')){
+ $task.action=$action;if(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows')){throw 'Risky action auto-approved'};$count++
+}
+$task.action='blender.render'
+if(-not(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows'))){throw 'Pinned fixture denied'};$count++
+$autoCfg.smoke_sha256='0'*64
+if(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows')){throw 'Changed script auto-approved'};$count++
+$task.action='workspace.stage_revision'
+if(TestAutoApproval $policy $autoCfg $task $false (Join-Path $root 'windows')){throw 'Denied project auto-approved'};$count++
+$policy.enabled=$false
+if(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows')){throw 'Disabled policy accepted'};$count++
+$policy.enabled=$true;$policy.delay_seconds=0
+if(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows')){throw 'Unsafe timer accepted'};$count++
 $hashTemp=Join-Path $PSScriptRoot ('hash-'+[Guid]::NewGuid().ToString('N')+'.txt')
 try{
  [IO.File]::WriteAllBytes($hashTemp,[Text.Encoding]::ASCII.GetBytes('abc'))
