@@ -6,6 +6,8 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'results.ps1')
 . (Join-Path $PSScriptRoot 'process-output.ps1')
 . (Join-Path $PSScriptRoot 'pipeline.ps1')
+. (Join-Path $PSScriptRoot 'scripts.ps1')
+. (Join-Path $PSScriptRoot 'feedback.ps1')
 $ErrorActionPreference='Stop'
 $cfg=Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($cfg.gateway -ne 'http://127.0.0.1:18774') { throw 'Only the local pinned SSH forwarding endpoint is permitted' }
@@ -92,6 +94,7 @@ try {
  do {
   if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'STOP')){break}
   try {
+   $cfg=Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8|ConvertFrom-Json
    Request '/v1/heartbeat' @{version='1.1.0'} | Out-Null
    [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'connection.json'),(@{heartbeat=[DateTime]::UtcNow.ToString('o')}|ConvertTo-Json),$utf8)
    $claim=Request '/v1/lease' @{}
@@ -116,6 +119,11 @@ try {
      New-Item -ItemType Directory -Force -Path $stageRoot|Out-Null
      $null=SafePath $cfg.source 'project.godot'
     }
+    if($job.action -eq 'scripts.register'){
+     $review=GetScriptReview $cfg $job $PSScriptRoot
+     $job|Add-Member -NotePropertyName script_review -NotePropertyValue $review
+     [IO.File]::WriteAllText($receipt,($job|ConvertTo-Json -Depth 20),$utf8)
+    }
     if($job.approval_required -or $job.action -notin $safe){
      Write-Host ('Waiting for local approval: '+$job.job_id)
      $approvalInfo=WaitLocalApproval $receipt
@@ -127,6 +135,7 @@ try {
      'blender.version' {$result=RunTool $cfg.blender @('--background','--factory-startup','--disable-autoexec','--version')}
      'godot.version' {$result=RunTool $cfg.godot @('--version')}
      'workspace.status' {$access=TestProjectAccess $cfg;$present=$false;if($access){$present=Test-Path -LiteralPath (Join-Path $cfg.source 'project.godot')};$result=@{project_access=$access;source_project_present=$present}}
+     'scripts.register' {$result=RegisterReviewedScript $cfg $job $PSScriptRoot $ConfigPath $review}
      'workspace.results' {$result=@{entries=@(GetResultCatalog $cfg $PSScriptRoot|ForEach-Object {@{result_id=$_.result_id;display=$_.display;kind=$_.kind;project_id=$_.project_id;sha256=$_.sha256}})}}
      'gui.blender.open' {$result=OpenRemoteResult 'blender'}
      'gui.godot.editor' {$result=OpenRemoteResult 'editor'}
@@ -163,10 +172,11 @@ try {
      'files.push' {$result=PushProjectFiles}
      'files.pull' {$result=PullProjectFiles}
      'files.publish' {$result=PublishProjectFiles}
+     'godot.preview.capture' {$result=CaptureGodotFeedback}
      'pipeline.run' {$result=RunDevelopmentPipeline}
      {$_ -in @('blender.run_approved_script','godot.tests.headless')} {
       $id=[string]$job.arguments.script_id
-      $scripts=@($cfg.approved_scripts|Where-Object {$_.id -eq $id -and $_.revision_sha -eq $job.revision_sha -and $_.action -eq $job.action})
+      $scripts=@($cfg.approved_scripts|Where-Object {$_.id -eq $id -and $_.project_id -eq $cfg.project_id -and $_.revision_sha -eq $job.revision_sha -and $_.action -eq $job.action})
       if($scripts.Count -ne 1){throw 'Script not locally allowlisted for exact revision/action'}
       $stage=SafePath $stageRoot $job.revision_sha;$script=SafePath $stage $scripts[0].relative_path
       if((Get-BridgeFileHash -LiteralPath $script).Hash.ToLowerInvariant() -ne $scripts[0].sha256){throw 'Approved script hash mismatch'}

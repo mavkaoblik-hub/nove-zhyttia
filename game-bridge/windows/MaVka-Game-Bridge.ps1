@@ -22,6 +22,7 @@ $auto=New-Object Windows.Forms.CheckBox;$auto.Text='Автосхвалення �
 $delayLabel=New-Object Windows.Forms.Label;$delayLabel.Text='Затримка, с:';$delayLabel.SetBounds(365,93,110,22)
 $delay=New-Object Windows.Forms.NumericUpDown;$delay.Minimum=5;$delay.Maximum=300;$delay.Value=15;$delay.SetBounds(480,90,65,25)
 $countdownLabel=New-Object Windows.Forms.Label;$countdownLabel.SetBounds(560,93,215,25);$countdownLabel.Anchor='Top,Right'
+$progress=New-Object Windows.Forms.ProgressBar;$progress.SetBounds(15,117,760,8);$progress.Anchor='Top,Left,Right';$progress.Visible=$false
 $policyPath=Join-Path $PSScriptRoot 'approval-policy.json'
 if(Test-Path -LiteralPath $policyPath){try{$policy=Get-Content -LiteralPath $policyPath -Raw -Encoding UTF8|ConvertFrom-Json;if($policy.project_id -eq $script:cfg.project_id){$auto.Checked=[bool]$policy.enabled;$delay.Value=[Math]::Max(5,[Math]::Min(300,[int]$policy.delay_seconds))}}catch{}}
 $label=New-Object Windows.Forms.Label;$label.Text='Проєкти: прапорець дозволяє доступ. Обраний рядок — активний проєкт. Зміни лише після відключення.';$label.SetBounds(15,130,760,35)
@@ -33,7 +34,7 @@ $save=New-Object Windows.Forms.Button;$save.Text='Зберегти доступ'
 $log=New-Object Windows.Forms.TextBox;$log.SetBounds(15,360,760,295);$log.Multiline=$true;$log.ReadOnly=$true;$log.ScrollBars='Both';$log.Font=New-Object Drawing.Font('Consolas',9)
 $log.WordWrap=$false;$log.Anchor='Top,Bottom,Left,Right'
 $projects.Anchor='Top,Left,Right';$label.Anchor='Top,Left,Right';$status.Anchor='Top,Left,Right';$approve.Anchor='Top,Right'
-$form.Controls.AddRange(@($status,$connect,$disconnect,$stop,$approve,$auto,$delayLabel,$delay,$countdownLabel,$label,$projects,$add,$save,$log))
+$form.Controls.AddRange(@($status,$connect,$disconnect,$stop,$approve,$auto,$delayLabel,$delay,$countdownLabel,$progress,$label,$projects,$add,$save,$log))
 $tabs=New-Object Windows.Forms.TabControl;$tabs.SetBounds(15,360,760,295);$tabs.Anchor='Top,Bottom,Left,Right'
 $journalTab=New-Object Windows.Forms.TabPage;$journalTab.Text='Журнал'
 $renderTab=New-Object Windows.Forms.TabPage;$renderTab.Text='Рендери'
@@ -147,6 +148,7 @@ $save.Add_Click({
  try{
   if($script:process -and -not $script:process.HasExited){throw 'Спочатку відключіть Bridge'}
   if($projects.SelectedItems.Count -ne 1){throw 'Оберіть активний проєкт'}
+  $script:cfg=Get-Content -LiteralPath $script:cfgPath -Raw -Encoding UTF8|ConvertFrom-Json
   $list=@();foreach($i in $projects.Items){
    $kind=if(Test-Path -LiteralPath (Join-Path $i.SubItems[1].Text 'project.godot')){'godot'}else{'assets'}
    $prior=@($script:cfg.projects|Where-Object {$_.id -eq [string]$i.Tag})
@@ -170,7 +172,18 @@ $approve.Add_Click({
   $file=Join-Path $PSScriptRoot ('receipts\'+$a.job_id+'.json')
   $hash=(Get-BridgeFileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
   $text=Get-Content -LiteralPath $file -Raw -Encoding UTF8
-  if([Windows.Forms.MessageBox]::Show($text+"`r`nДозволити саме це завдання?",'Підтвердження','YesNo','Warning') -eq 'Yes'){
+  $receiptObject=$text|ConvertFrom-Json
+  $decision=$false
+  if($receiptObject.action -eq 'scripts.register'){
+   $reviewForm=New-Object Windows.Forms.Form;$reviewForm.Text='Дозвіл на код: лише цей проєкт, версія та SHA-256';$reviewForm.Size=New-Object Drawing.Size(900,700);$reviewForm.StartPosition='CenterParent'
+   $code=New-Object Windows.Forms.TextBox;$code.Multiline=$true;$code.ReadOnly=$true;$code.ScrollBars='Both';$code.WordWrap=$false;$code.Dock='Fill';$code.Font=New-Object Drawing.Font('Consolas',10)
+   $code.Text="Код виконується з правами вашого користувача Windows. Перевірте його перед дозволом.`r`n"+($receiptObject.script_review|ConvertTo-Json -Depth 8)+"`r`n`r`n----- CODE -----`r`n"+$receiptObject.script_review.code
+   $buttons=New-Object Windows.Forms.FlowLayoutPanel;$buttons.Dock='Bottom';$buttons.Height=45
+   $yes=New-Object Windows.Forms.Button;$yes.Text='Дозволити код';$yes.Width=150;$yes.DialogResult='Yes'
+   $no=New-Object Windows.Forms.Button;$no.Text='Відхилити';$no.DialogResult='No';$buttons.Controls.AddRange(@($yes,$no));$reviewForm.Controls.AddRange(@($code,$buttons));$reviewForm.CancelButton=$no
+   try{$decision=($reviewForm.ShowDialog($form) -eq 'Yes')}finally{$reviewForm.Dispose()}
+  }else{$decision=([Windows.Forms.MessageBox]::Show($text+"`r`nДозволити саме це завдання?",'Підтвердження','YesNo','Warning') -eq 'Yes')}
+  if($decision){
    $hash|Set-Content -LiteralPath (Join-Path $PSScriptRoot ('approvals\'+$a.job_id+'.sha256')) -Encoding ASCII;AppLog ('approved '+$a.job_id)
   }else{StopJob}
  }catch{ShowError $_.Exception.Message}
@@ -200,9 +213,12 @@ $timer.Add_Tick({
   $approve.Enabled=$hasActive;$stop.Enabled=$hasActive
   $approve.Text=if($hasActive){'Переглянути завдання'}else{'Немає активного завдання'}
   $countdownLabel.Text=''
+  $progress.Visible=$hasActive
   if($hasActive){
    try{$active=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'active.json') -Raw -Encoding UTF8|ConvertFrom-Json
     if($active.PSObject.Properties.Name -contains 'remaining_seconds' -and $null -ne $active.remaining_seconds){$countdownLabel.Text='Автосхвалення: '+$active.remaining_seconds+' с'}
+    elseif($active.PSObject.Properties.Name -contains 'phase'){$countdownLabel.Text=$active.phase}
+    if($active.PSObject.Properties.Name -contains 'progress'){$progress.Style='Blocks';$progress.Value=[Math]::Max(0,[Math]::Min(100,[int]$active.progress))}else{$progress.Style='Marquee'}
     $done=Join-Path $PSScriptRoot ('approvals\'+$active.job_id+'.sha256')
     if(Test-Path -LiteralPath $done){$approve.Enabled=$false;$approve.Text='Завдання виконується'}
    }catch{}

@@ -1,5 +1,5 @@
 ﻿function GetInstalledTool([string]$Name) {
- if($Name -notin @('pipeline_scene.py','bridge_preview.gd')){throw 'Unknown built-in pipeline tool'}
+ if($Name -notin @('pipeline_scene.py','bridge_preview.gd','capture_preview.gd')){throw 'Unknown built-in pipeline tool'}
  $manifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json
  $entry=@($manifest|Where-Object {$_.name -eq $Name});$path=Join-Path $PSScriptRoot $Name
  if($entry.Count -ne 1 -or (Get-BridgeFileHash -LiteralPath $path).Hash -ne $entry[0].sha256){throw 'Installed pipeline tool integrity'}

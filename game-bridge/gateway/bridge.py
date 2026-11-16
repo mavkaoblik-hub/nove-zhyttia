@@ -10,7 +10,7 @@ ACTIONS = {'system.health','blender.version','godot.version','workspace.status',
  'workspace.stage_revision','blender.scene.inspect','blender.render','blender.export_gltf',
  'blender.run_approved_script','godot.project.inspect','godot.project.import',
  'godot.project.validate','godot.tests.headless','godot.export','artifact.upload','job.cancel','files.push','files.pull','files.publish',
- 'workspace.results','gui.blender.open','gui.godot.editor','gui.godot.run','pipeline.run'}
+ 'godot.preview.capture','scripts.register','workspace.results','gui.blender.open','gui.godot.editor','gui.godot.run','pipeline.run'}
 TERMINAL = {'succeeded','failed','cancelled','expired'}
 def encoded(x): return json.dumps(x, separators=(',',':'), ensure_ascii=False).encode()
 def digest(b): return hashlib.sha256(b).hexdigest()
