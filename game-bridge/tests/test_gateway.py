@@ -59,5 +59,11 @@ class Tests(unittest.TestCase):
  def test_idempotency_conflict(self):
   self.submit()
   with self.assertRaises(ValueError):self.submit(action='godot.version')
+ def test_connections_closed(self):
+  import gc
+  gc.collect();before=len(list(Path('/proc/self/fd').iterdir()))
+  for i in range(300):self.b.dispatch('owner',self.owner,'GET','/v1/status',{})
+  after=len(list(Path('/proc/self/fd').iterdir()))
+  self.assertLessEqual(after,before+2,'SQLite handles must close before GC')
 
 if __name__=='__main__':unittest.main()

@@ -1,30 +1,34 @@
 [
   {
-    "sha256": "13403b26eff5407ae7000dfb680b12d699f767d90a44467548a0533b55785ee1",
+    "sha256": "2a34aab8bf879d0b52bd3fd8e895cb03388e0eb71d747379bcda1c2c564b307c",
     "name": "agent.ps1"
   },
   {
-    "sha256": "64afdf30a1b7001f430d363cd19fc7df53f7ac65f5f78cba364f7ca48e1f37f3",
+    "sha256": "704da10a52ef0074510c219bfa5056f7769993c9307d8a678dc1618e27bae90d",
     "name": "approve.ps1"
   },
   {
-    "sha256": "e544ffc19bb37c9f41c698f2b38d42894645e92fb4c1d1daeecfd34cd6febc69",
+    "sha256": "f9df8c274cfcebefa76d01ef076f783f1116844964f0c3ca5accc2cf893d4c20",
     "name": "config.example.json"
   },
   {
-    "sha256": "79c88d97bdb4745f132145a4430eba8ef8e3f315566c49352ef58d532b52262d",
+    "sha256": "d430c2739168ce379d926fc72397286745812df68fe3ddd8d10472fa3b103ead",
     "name": "diagnostics.ps1"
+  },
+  {
+    "sha256": "72089d73f83c139bf41b8f315417a5f081627e99da824e83a703221cf24ce8e7",
+    "name": "hash.ps1"
   },
   {
     "sha256": "de2851a27f4a485ac8c31f9a017dce725084b0eb692b67aeea55afa67baebb3d",
     "name": "inspect_scene.py"
   },
   {
-    "sha256": "0af4e8bf2a37ca8fa872a5dc5e3a6ef529f03731f5cda8e282b201837c218217",
+    "sha256": "00d75b5990f3f25065d8b7cf765a6ce501141dea94db4cdbff5ceb23960edef5",
     "name": "install-agent.ps1"
   },
   {
-    "sha256": "4aaac3717a0992faa62dc256a75337ee2844258bfb6fd85ab9467aa6046640a2",
+    "sha256": "2ac7c9d51b56cac0b3da97228c5c7f7ba84ce7acba1bc714eebaac56ec92fb18",
     "name": "MaVka-Game-Bridge.ps1"
   },
   {

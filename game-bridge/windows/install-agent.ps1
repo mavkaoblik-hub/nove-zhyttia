@@ -1,14 +1,22 @@
-﻿param([Parameter(Mandatory=$true)][string]$PackageSha256,[string]$Destination=(Join-Path $env:LOCALAPPDATA 'MaVkaGameBridge'),[string]$DeviceId='novezhyttia-pc',[string]$SshKeyPath='',[string]$HostKeyAlias='')
+﻿param([Parameter(Mandatory=$true)][string]$PackageSha256,[string]$Destination=(Join-Path $env:LOCALAPPDATA 'MaVkaGameBridge'),[string]$DeviceId='dev-pc',[string]$SshKeyPath='',[string]$HostKeyAlias='')
+function Get-BridgeFileHash {
+ param([Parameter(Mandatory=$true)][string]$LiteralPath,[string]$Algorithm='SHA256')
+ if($Algorithm -ne 'SHA256'){throw 'Only SHA256 is supported'}
+ $stream=[IO.File]::OpenRead($LiteralPath);$sha=[Security.Cryptography.SHA256]::Create()
+ try{return [pscustomobject]@{Hash=([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToLowerInvariant()}}
+ finally{$sha.Dispose();$stream.Dispose()}
+}
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if($DeviceId -notmatch '^[a-zA-Z0-9_-]{1,60}$'){throw 'Device ID'}
 if(Test-Path -LiteralPath $Destination){throw 'Destination exists; preserve it and follow update/rollback instructions'}
 # Trust anchor must be copied from the independently delivered release checksum.
-if((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'manifest.json')).Hash.ToLowerInvariant() -ne $PackageSha256.ToLowerInvariant()){throw 'Manifest hash mismatch'}
+if((Get-BridgeFileHash -LiteralPath (Join-Path $PSScriptRoot 'manifest.json')).Hash.ToLowerInvariant() -ne $PackageSha256.ToLowerInvariant()){throw 'Manifest hash mismatch'}
 $manifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json
 foreach($f in $manifest){
  if($f.name -notmatch '^[a-zA-Z0-9_.-]+$'){throw 'Manifest path'}
- if((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $f.name)).Hash.ToLowerInvariant() -ne $f.sha256){throw ('Hash mismatch '+$f.name)}
+ if((Get-BridgeFileHash -LiteralPath (Join-Path $PSScriptRoot $f.name)).Hash.ToLowerInvariant() -ne $f.sha256){throw ('Hash mismatch '+$f.name)}
 }
 $null=Get-Command ssh.exe -ErrorAction Stop
 if(-not $SshKeyPath -or -not $HostKeyAlias){

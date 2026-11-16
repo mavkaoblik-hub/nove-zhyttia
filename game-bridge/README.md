@@ -1,37 +1,13 @@
-# MaVka Game Bridge v1.0
+# MaVka Game Bridge
 
-Одна розширювана Windows-програма для інструментів розробки. Gateway на Oracle вже розгорнуто; встановлення на ПК виконує власник. Наскрізне приймання Blender/Godot ще не завершене.
+One extensible Windows application and a private Python/SQLite gateway for reviewed development jobs. Blender and Godot are typed handlers in the same agent. No general-purpose remote shell, Windows service or Windows autostart is installed.
 
-## Встановлення на Windows — без адміністратора
+Use the existing owner-controlled SSH/VPN transport. Examples are templates: configure your own project/tool paths and pinned SSH connection locally. Keep credentials, diagnostic output, job history, hardware inventory and deployment reports outside Git. Do not publish a gateway or weaken host-key verification.
 
-1. Розпакуйте пакет. Запустіть у PowerShell із каталогу `windows`:
+The Windows installer verifies a separately delivered manifest SHA-256 and each package file, uses a dedicated expiring device credential protected with DPAPI, and creates a Desktop shortcut. Project access starts denied. Exact-job local approval is required for code-bearing actions. Source stays separate from versioned staging and outputs.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\diagnostics.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-agent.ps1 -PackageSha256 185084068c3d28049c1978ca880a081e74883176a26d5616a7c8666ee31f8d90
-```
+Gateway requires Python standard library and a dedicated unprivileged account. Review deploy/mavka-game-bridge.service and install-server.sh before deployment. Default example transport is a private WireGuard address with SSH forwarding; it is not a public HTTP endpoint. deploy/backup.py creates and verifies private snapshots without overwriting live state.
 
-Перший скрипт лише збирає діагностику у власний файл, не змінює Blender/Godot. Другий перевіряє хеш маніфесту й кожного файла, використовує параметри вже підключеного Oracle SSH-плагіна, не читає приватний ключ у пам'ять скрипту, реєструє окремий 30-денний токен і зберігає його через DPAPI. VPN має бути ввімкнений. За відсутності конфігурації плагіна можна явно передати `-SshKeyPath` і `-HostKeyAlias` зі свого чинного підключення. Не приймайте новий host key наосліп.
+Tests: `python3 -m unittest discover -s tests -v`; on Windows `powershell.exe -NoProfile -File tests\test_agent.ps1`. A skipped junction test is not a pass. Review and test real application paths, drivers and project scripts on the target PC. Approved-script/export lists start empty. The bridge does not sandbox trusted Blender/GDScript code or guarantee full process-tree isolation.
 
-2. Відкрийте ярлик **MaVka Game Bridge** на робочому столі. Вікно й значок у треї працюють разом. Після запуску програма сама підключається через чинний SSH/WireGuard; нових вхідних портів немає.
-3. Доступ до проєкту спочатку заборонений. Натисніть «Відключити», позначте дозволений проєкт, оберіть активний рядок, натисніть «Зберегти доступ», потім «Підключити». Додаткові проєкти додаються через вибір папки з `project.godot`; у кожного окремий staging.
-
-Кнопки: «Підключити», «Відключити», «Зупинити завдання», «Переглянути завдання». Остання показує точний receipt для ручного дозволу/відмови. Журнал містить підключення, зміни доступу, дії, ID і результати; детальні логи й артефакти — у `%LOCALAPPDATA%\MaVkaGameBridge\output`.
-
-Закриття вікна відключає агент і SSH-forward, прибирає значок у треї. Якщо процес ще завершується, вікно залишиться відкритим з повідомленням. Програма не додається до автозапуску Windows і не має постійної фонової служби.
-
-## Перша перевірка
-
-Через чинний Oracle-плагін виконавець ставить `system.health`, `blender.version`, `godot.version` за інструкцією WORKFLOW.md. Лише після успішного heartbeat/версій — дозволена staging-копія, тестовий CPU render/GLB, імпорт і headless validation. PNG не видається за робот ROBOT-REF-V1. Вихідний проєкт та V0.2 не змінюються.
-
-Нові Python/GDScript дозволяються тільки офлайн після рев'ю: у локальному config.json масив `approved_scripts` містить id, action, relative_path у staging, sha256 і точний revision_sha. Для `godot.export` потрібен локальний `export_presets`; початково обидва списки порожні. Новий скрипт/експорт усе одно потребує підтвердження конкретного завдання. Збірка ZIP обмежена 8 MiB; більші результати залишаються локально з помилкою квоти й потребують окремої політики зберігання.
-
-## Зупинка / видалення
-
-Кнопка «Зупинити завдання» скасовує поточну дію, лишаючи програму підключеною. «Відключити» завершує сеанс. Для аварійної зупинки — stop-agent.ps1. Перед видаленням закрийте вікно, виконайте встановлений uninstall-agent.ps1; `-RemoveData` додатково видаляє лише типовий каталог встановлення після перевірок. Відкличте токен на Oracle через owner.py revoke. Деталі — rollback.md.
-
-## Тести та фактичний стан
-
-Oracle: `python3 -m unittest discover -s tests -v`. Windows: `powershell.exe -NoProfile -File tests\test_agent.ps1`. Останній тест не запускає агент чи інструменти й не змінює проєкти. GUI/інсталяція, реальні версії та Blender/Godot потребують власницького запуску; не вважайте їх перевіреними за самим фактом наявності коду.
-
-Див. DEPLOYMENT_REPORT.md, SECURITY_CHECKLIST.md, architecture.md, inventory.md, threat-model.md, protocol.md, WORKFLOW.md, rollback.md. Секрети й особисті дані не входять до пакета чи GitHub.
+Manual setup: run read-only diagnostics locally, verify the package's manifest hash through an independent trusted channel, run install-agent.ps1 -PackageSha256 HASH, then open the Desktop shortcut. No tokens or live configuration belong in this repository. Installer hashes must be rebuilt when any package file is changed.

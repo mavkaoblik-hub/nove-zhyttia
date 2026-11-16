@@ -1,5 +1,5 @@
 """MaVka Game Bridge 1.0. Standard library, private WireGuard transport only."""
-import argparse, base64, hashlib, hmac, json, os, re, secrets, sqlite3, time, threading
+import argparse, base64, contextlib, hashlib, hmac, json, os, re, secrets, sqlite3, time, threading
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -26,8 +26,12 @@ class Bridge:
    CREATE TABLE IF NOT EXISTS audit(seq INTEGER PRIMARY KEY,at INTEGER,actor TEXT,event TEXT,job TEXT);
    CREATE TABLE IF NOT EXISTS artifacts(job TEXT,name TEXT,sha256 TEXT,size INTEGER,PRIMARY KEY(job,name));
    PRAGMA user_version=1;''')
+ @contextlib.contextmanager
  def db(self):
-  c=sqlite3.connect(self.root/'queue.sqlite',timeout=10);c.row_factory=sqlite3.Row;return c
+  c=sqlite3.connect(self.root/'queue.sqlite',timeout=10);c.row_factory=sqlite3.Row
+  try:
+   with c:yield c
+  finally:c.close()
  def auth(self,headers,method,path,body):
   creds=json.loads(self.credentials.read_text());who=headers.get('X-Principal','');entry=creds.get(who)
   if not entry or entry.get('revoked') or entry['expires_at']<time.time(): raise PermissionError('unauthorized')
@@ -95,7 +99,8 @@ class Bridge:
    if owner or method!='POST' or not hmac.compare_digest(str(data.get('lease','')),r['lease'] or '!'):raise PermissionError('lease')
    if r['state'] in TERMINAL:return {'state':r['state']}
    if op=='progress':
-    c.execute("UPDATE jobs SET state='running',deadline=? WHERE id=?",(now+90,jid));return {'state':'running'}
+    c.execute("UPDATE jobs SET state='running',deadline=? WHERE id=?",(now+90,jid))
+    c.execute('UPDATE devices SET heartbeat=? WHERE id=?',(now,device));return {'state':'running'}
    if op=='result':
     if data.get('state') not in {'succeeded','failed','cancelled'}:raise ValueError('result state')
     if len(encoded(data))>65536:raise ValueError('result quota')
@@ -131,7 +136,11 @@ class Handler(BaseHTTPRequestHandler):
    result=self.server.bridge.dispatch(who,role,self.command,self.path,data);code=200
   except PermissionError:code=403;result={'error':'forbidden'}
   except (ValueError,KeyError,TypeError,sqlite3.IntegrityError):code=400;result={'error':'invalid request'}
-  except Exception:code=500;result={'error':'internal error'}
+  except Exception as error:
+   import traceback
+   frame=traceback.extract_tb(error.__traceback__)[-1]
+   print('bridge_error',type(error).__name__,frame.name,frame.lineno,flush=True)
+   code=500;result={'error':'internal error'}
   out=encoded(result);self.send_response(code);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(out)));self.end_headers();self.wfile.write(out)
 
 class BoundedServer(ThreadingHTTPServer):

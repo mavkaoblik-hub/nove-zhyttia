@@ -10,6 +10,7 @@ ExecStart=/usr/bin/python3 -I /opt/mavka-game-bridge/current/bridge.py --host 10
 Restart=on-failure
 RestartSec=5
 StateDirectory=mavka-game-bridge
+StateDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

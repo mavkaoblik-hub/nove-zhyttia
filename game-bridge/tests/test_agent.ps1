@@ -1,6 +1,12 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $count=0
+. (Join-Path $root 'windows\hash.ps1')
+$hashTemp=Join-Path $PSScriptRoot ('hash-'+[Guid]::NewGuid().ToString('N')+'.txt')
+try{
+ [IO.File]::WriteAllBytes($hashTemp,[Text.Encoding]::ASCII.GetBytes('abc'))
+ if((Get-BridgeFileHash -LiteralPath $hashTemp).Hash -ne 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'){throw 'SHA256 known-answer test failed'};$count++
+}finally{Remove-Item -LiteralPath $hashTemp -Force}
 Get-ChildItem -LiteralPath (Join-Path $root 'windows') -Filter '*.ps1'|ForEach-Object {
  $tokens=$null;$errors=$null
  [Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors)|Out-Null

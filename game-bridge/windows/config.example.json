@@ -1,10 +1,10 @@
 {
   "gateway": "http://127.0.0.1:18774",
-  "device_id": "novezhyttia-pc",
-  "principal": "device-novezhyttia-pc",
+  "device_id": "dev-pc",
+  "principal": "device-dev-pc",
   "blender": "C:\\Program Files\\Blender Foundation\\Blender 5.3\\blender.exe",
-  "godot": "C:\\РУДИЧИК\\Godot\\Godot_v4.7.2-stable_win64_console.exe",
-  "source": "C:\\РУДИЧИК\\Godot\\NoveZhyttia",
+  "godot": "C:\\Dev\\Godot\\Godot_v4.7.2-stable_win64_console.exe",
+  "source": "C:\\Dev\\Godot\\NoveZhyttia",
   "timeout_seconds": 120,
   "max_memory_mb": 4096,
   "smoke_sha256": "b48fa5539b7199e47a8a0312356906df03e8671cc46ba7aefccc517ce4f9abcc",
@@ -12,7 +12,7 @@
   "ssh_host_key_alias": "oracle-cloud-pc",
   "projects": [
     {
-      "path": "C:\\РУДИЧИК\\Godot\\NoveZhyttia",
+      "path": "C:\\Dev\\Godot\\NoveZhyttia",
       "enabled": false,
       "id": "00000000000000000000000000000001",
       "name": "NoveZhyttia"

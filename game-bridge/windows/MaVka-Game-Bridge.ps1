@@ -1,4 +1,5 @@
-﻿# One user application. Tray lifetime equals window lifetime; no Windows autostart.
+﻿. (Join-Path $PSScriptRoot 'hash.ps1')
+# One user application. Tray lifetime equals window lifetime; no Windows autostart.
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference='Stop'
@@ -9,6 +10,7 @@ $script:cfgPath=Join-Path $PSScriptRoot 'config.json'
 $script:cfg=Get-Content -LiteralPath $script:cfgPath -Raw -Encoding UTF8|ConvertFrom-Json
 $form=New-Object Windows.Forms.Form
 $form.Text='MaVka Game Bridge';$form.Size=New-Object Drawing.Size(820,660);$form.StartPosition='CenterScreen'
+$form.MinimumSize=New-Object Drawing.Size(820,660)
 $form.Icon=[Drawing.SystemIcons]::Application
 $status=New-Object Windows.Forms.Label;$status.Text='Відключено';$status.SetBounds(15,15,760,25)
 $connect=New-Object Windows.Forms.Button;$connect.Text='Підключити';$connect.SetBounds(15,45,150,32)
@@ -22,6 +24,8 @@ foreach($p in $script:cfg.projects){$item=New-Object Windows.Forms.ListViewItem(
 $add=New-Object Windows.Forms.Button;$add.Text='Додати проєкт';$add.SetBounds(15,275,170,30)
 $save=New-Object Windows.Forms.Button;$save.Text='Зберегти доступ';$save.SetBounds(195,275,190,30)
 $log=New-Object Windows.Forms.TextBox;$log.SetBounds(15,320,760,275);$log.Multiline=$true;$log.ReadOnly=$true;$log.ScrollBars='Both';$log.Font=New-Object Drawing.Font('Consolas',9)
+$log.WordWrap=$false;$log.Anchor='Top,Bottom,Left,Right'
+$projects.Anchor='Top,Left,Right';$label.Anchor='Top,Left,Right';$status.Anchor='Top,Left,Right';$approve.Anchor='Top,Right'
 $form.Controls.AddRange(@($status,$connect,$disconnect,$stop,$approve,$label,$projects,$add,$save,$log))
 $tray=New-Object Windows.Forms.NotifyIcon;$tray.Icon=$form.Icon;$tray.Text='MaVka Game Bridge';$tray.Visible=$true
 $menu=New-Object Windows.Forms.ContextMenuStrip
@@ -81,10 +85,12 @@ $save.Add_Click({
 })
 $approve.Add_Click({
  try{
-  $a=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'active.json') -Raw -Encoding UTF8|ConvertFrom-Json
+  $activeFile=Join-Path $PSScriptRoot 'active.json'
+  if(-not(Test-Path -LiteralPath $activeFile)){$status.Text='Немає активного завдання. Завершені дії показані в журналі.';return}
+  $a=Get-Content -LiteralPath $activeFile -Raw -Encoding UTF8|ConvertFrom-Json
   if($a.job_id -notmatch '^[a-zA-Z0-9_-]{1,80}$'){throw 'Некоректний ID'}
   $file=Join-Path $PSScriptRoot ('receipts\'+$a.job_id+'.json')
-  $hash=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+  $hash=(Get-BridgeFileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
   $text=Get-Content -LiteralPath $file -Raw -Encoding UTF8
   if([Windows.Forms.MessageBox]::Show($text+"`r`nДозволити саме це завдання?",'Підтвердження','YesNo','Warning') -eq 'Yes'){
    $hash|Set-Content -LiteralPath (Join-Path $PSScriptRoot ('approvals\'+$a.job_id+'.sha256')) -Encoding ASCII;AppLog ('approved '+$a.job_id)
@@ -96,6 +102,9 @@ $timer.Add_Tick({
  try{
   $running=$script:process -and -not $script:process.HasExited
   $connect.Enabled=-not $running;$disconnect.Enabled=[bool]$running;$add.Enabled=-not $running;$save.Enabled=-not $running;$projects.Enabled=-not $running
+  $hasActive=Test-Path -LiteralPath (Join-Path $PSScriptRoot 'active.json')
+  $approve.Enabled=$hasActive;$stop.Enabled=$hasActive
+  $approve.Text=if($hasActive){'Переглянути завдання'}else{'Немає активного завдання'}
   if($running){$status.Text='Агент запущений; зʼєднання перевіряється за heartbeat. Відключити — завершити роботу.'}elseif($script:process){$status.Text='Відключено (код '+$script:process.ExitCode+'). '+$script:stderr.Result}
   $connection=Join-Path $PSScriptRoot 'connection.json'
   if($running -and (Test-Path -LiteralPath $connection)){
@@ -103,10 +112,26 @@ $timer.Add_Tick({
    if(([DateTime]::UtcNow-[DateTime]::Parse($last.heartbeat).ToUniversalTime()).TotalSeconds -lt 30){$status.Text='Підключено до Oracle VM. Heartbeat: '+$last.heartbeat}
   }
   $lines=@();foreach($f in @('journal.jsonl','ui-journal.jsonl')){ $p=Join-Path $PSScriptRoot ('logs\'+$f);if(Test-Path -LiteralPath $p){$lines+=@(Get-Content -LiteralPath $p -Tail 100 -Encoding UTF8)}}
-  $log.Text=($lines|Sort-Object)-join "`r`n"
+  $events=@($lines|ForEach-Object {try{$_|ConvertFrom-Json}catch{}}|Sort-Object at)
+  $names=@{application_opened='Програму відкрито';application_closed='Програму закрито';connect_requested='Підключення';disconnect_requested='Відключення';project_access_changed='Змінено доступ до проєктів';leased='Завдання отримано';succeeded='Успішно';failed='Помилка';cancelled='Скасовано';approved='Дозволено';cancel_requested='Запит на зупинку'}
+  $display=@($events|ForEach-Object {
+   $event=[string]$_.event;$key=($event -split ' ')[0];$name=if($names.ContainsKey($key)){$names[$key]}else{$event}
+   $action=if($_.PSObject.Properties.Name -contains 'action'){[string]$_.action}else{''}
+   $id=if($_.PSObject.Properties.Name -contains 'job_id'){[string]$_.job_id}else{''}
+   ([DateTime]::Parse($_.at).ToLocalTime().ToString('dd.MM HH:mm:ss'))+' | '+$name+' | '+$action+' '+$id
+  })
+  $text=$display -join "`r`n"
+  if($log.Text -ne $text){$log.Text=$text;$log.SelectionStart=$log.TextLength;$log.ScrollToCaret()}
  }catch{$status.Text=$_.Exception.Message}
 })
-$form.Add_Shown({$timer.Start();AppLog 'application_opened';ConnectBridge})
+$form.Add_Shown({
+ if(-not $script:closing){
+  $script:closing=$true
+  # Hidden console startup can hide the first native window. Re-show the form explicitly.
+  $form.Hide();$form.Show();$form.WindowState='Normal';$form.Activate()
+  $timer.Start();AppLog 'application_opened';ConnectBridge
+ }
+})
 $form.Add_FormClosing({param($sender,$e)
  if($script:process -and -not $script:process.HasExited){
   DisconnectBridge

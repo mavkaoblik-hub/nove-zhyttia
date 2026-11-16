@@ -1,5 +1,6 @@
 ﻿param([string]$ConfigPath=(Join-Path $PSScriptRoot 'config.json'),[switch]$Once)
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'hash.ps1')
 $ErrorActionPreference='Stop'
 $cfg=Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($cfg.gateway -ne 'http://127.0.0.1:18774') { throw 'Only the local pinned SSH forwarding endpoint is permitted' }
@@ -28,7 +29,9 @@ function Request([string]$Path,$Data,[string]$Method='POST') {
  $headers=@{'X-Principal'=$cfg.principal;'X-Time'=$stamp;'X-Nonce'=$nonce;'X-Signature'=$sig}
  $params=@{Uri=($cfg.gateway+$Path);Method=$Method;Headers=$headers;TimeoutSec=15;UseBasicParsing=$true;MaximumRedirection=0}
  if($Method -ne 'GET'){$params.Body=$bytes;$params.ContentType='application/json; charset=utf-8'}
- return (Invoke-WebRequest @params).Content | ConvertFrom-Json
+ $response=(Invoke-WebRequest @params).Content | ConvertFrom-Json
+ [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'connection.json'),(@{heartbeat=[DateTime]::UtcNow.ToString('o')}|ConvertTo-Json),$utf8)
+ return $response
 }
 function SafePath([string]$Root,[string]$Relative) {
  if([IO.Path]::IsPathRooted($Relative) -or $Relative.Contains(':')){throw 'Absolute path or ADS denied'}
@@ -53,6 +56,7 @@ function RunTool([string]$Exe,[string[]]$Arguments) {
  $psi=New-Object Diagnostics.ProcessStartInfo;$psi.FileName=$Exe
  $psi.Arguments=(($Arguments|ForEach-Object {'"'+$_+'"'}) -join ' ')
  $psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.RedirectStandardOutput=$true;$psi.RedirectStandardError=$true;$psi.WorkingDirectory=$out
+ $psi.StandardOutputEncoding=$utf8;$psi.StandardErrorEncoding=$utf8
  $p=New-Object Diagnostics.Process;$p.StartInfo=$psi
  $null=$p.Start();$stdout=$p.StandardOutput.ReadToEndAsync();$stderr=$p.StandardError.ReadToEndAsync();$watch=[Diagnostics.Stopwatch]::StartNew();$last=0
  try {
@@ -135,13 +139,13 @@ try {
       if(($files|Where-Object {-not $_.PSIsContainer}|Measure-Object Length -Sum).Sum -gt 1GB){throw 'Snapshot quota'}
       New-Item -ItemType Directory -Path $dest|Out-Null
       foreach($f in $files){$rel=$f.FullName.Substring($cfg.source.TrimEnd('\').Length+1);if($rel -match '(^|\\)(\.git|\.godot)(\\|$)'){continue};$target=SafePath $dest $rel;if($f.PSIsContainer){New-Item -ItemType Directory -Force -Path $target|Out-Null}else{Copy-Item -LiteralPath $f.FullName -Destination $target}}
-      $manifest=@(Get-ChildItem -LiteralPath $dest -File -Recurse | ForEach-Object {@{path=$_.FullName.Substring($dest.Length+1);sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}})
+      $manifest=@(Get-ChildItem -LiteralPath $dest -File -Recurse | ForEach-Object {@{path=$_.FullName.Substring($dest.Length+1);sha256=(Get-BridgeFileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}})
       [IO.File]::WriteAllText((Join-Path $dest 'bridge-snapshot.json'),($manifest|ConvertTo-Json -Depth 5),$utf8)
-      $result=@{snapshot_sha256=(Get-FileHash -LiteralPath (Join-Path $dest 'bridge-snapshot.json')).Hash;note='Local snapshot; revision SHA is provenance label, not proof of Git tree equivalence'}
+      $result=@{snapshot_sha256=(Get-BridgeFileHash -LiteralPath (Join-Path $dest 'bridge-snapshot.json')).Hash;note='Local snapshot; revision SHA is provenance label, not proof of Git tree equivalence'}
      }
      {$_ -in @('blender.render','blender.export_gltf')} {
       $script=Join-Path $PSScriptRoot 'smoke.py'
-      if((Get-FileHash -LiteralPath $script).Hash.ToLowerInvariant() -ne $cfg.smoke_sha256){throw 'Script checksum mismatch'}
+      if((Get-BridgeFileHash -LiteralPath $script).Hash.ToLowerInvariant() -ne $cfg.smoke_sha256){throw 'Script checksum mismatch'}
       $result=RunTool $cfg.blender @('--background','--factory-startup','--disable-autoexec','--python',$script,'--',$out)
       Upload (Join-Path $out 'smoke.png');Upload (Join-Path $out 'smoke.glb')
      }
@@ -150,7 +154,7 @@ try {
       $scene=SafePath $stage ([string]$job.arguments.scene)
       if([IO.Path]::GetExtension($scene) -ne '.blend'){throw 'Expected staged .blend'}
       $script=Join-Path $PSScriptRoot 'inspect_scene.py'
-      if((Get-FileHash -LiteralPath $script).Hash.ToLowerInvariant() -ne $cfg.inspect_sha256){throw 'Inspector checksum mismatch'}
+      if((Get-BridgeFileHash -LiteralPath $script).Hash.ToLowerInvariant() -ne $cfg.inspect_sha256){throw 'Inspector checksum mismatch'}
       $result=RunTool $cfg.blender @('--background','--factory-startup','--disable-autoexec','--python',$script,'--',$scene,$out)
       Upload (Join-Path $out 'scene.json')
      }
@@ -159,7 +163,7 @@ try {
       $scripts=@($cfg.approved_scripts|Where-Object {$_.id -eq $id -and $_.revision_sha -eq $job.revision_sha -and $_.action -eq $job.action})
       if($scripts.Count -ne 1){throw 'Script not locally allowlisted for exact revision/action'}
       $stage=SafePath $stageRoot $job.revision_sha;$script=SafePath $stage $scripts[0].relative_path
-      if((Get-FileHash -LiteralPath $script).Hash.ToLowerInvariant() -ne $scripts[0].sha256){throw 'Approved script hash mismatch'}
+      if((Get-BridgeFileHash -LiteralPath $script).Hash.ToLowerInvariant() -ne $scripts[0].sha256){throw 'Approved script hash mismatch'}
       if($job.action -eq 'blender.run_approved_script'){
        if([IO.Path]::GetExtension($script) -ne '.py'){throw 'Python script required'}
        $result=RunTool $cfg.blender @('--background','--factory-startup','--disable-autoexec','--python',$script,'--',$out)
@@ -188,7 +192,7 @@ try {
       $stage=SafePath $stageRoot $job.revision_sha
       $null=SafePath $stage 'project.godot'
       if(-not(Test-Path -LiteralPath (Join-Path $stage 'project.godot'))){throw 'Staging missing'}
-      if($job.action -eq 'godot.project.inspect'){$result=@{project_sha256=(Get-FileHash -LiteralPath (Join-Path $stage 'project.godot')).Hash}}
+      if($job.action -eq 'godot.project.inspect'){$result=@{project_sha256=(Get-BridgeFileHash -LiteralPath (Join-Path $stage 'project.godot')).Hash}}
       else{
        if($job.action -eq 'godot.project.import'){
         $modelId=[string]$job.arguments.model_job_id
