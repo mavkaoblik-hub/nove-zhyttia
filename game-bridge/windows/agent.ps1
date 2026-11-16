@@ -227,7 +227,7 @@ try {
    $result['approval']=$approvalInfo
    $final=Request ('/v1/jobs/'+$job.job_id+'/result') @{lease=$lease;state=$state;result=$result}
    if($final.state -in @('cancelled','expired')){$state=$final.state}
-   [IO.File]::WriteAllText((Join-Path $out 'result.json'),(@{state=$state;result=$result;project_id=$cfg.project_id}|ConvertTo-Json -Depth 10),$utf8)
+   [IO.File]::WriteAllText((Join-Path $out 'result.json'),(@{state=$state;result=$result;project_id=$(if($job.action -eq 'godot.preview.capture'){[string]$job.arguments.project_id}else{$cfg.project_id})}|ConvertTo-Json -Depth 10),$utf8)
    Write-Host ($job.job_id+' '+$state)
    Journal $state $job.job_id $job.action
    Remove-Item -LiteralPath (Join-Path $PSScriptRoot 'active.json') -Force -ErrorAction SilentlyContinue

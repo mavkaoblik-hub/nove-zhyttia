@@ -59,6 +59,7 @@ if($currentProject.PSObject.Properties.Name -contains 'remote_open_enabled'){$re
 $resultButtons.Controls.Add($remoteOpen)
 $remoteOpen.Add_CheckedChanged({
  try{if($script:process -and -not $script:process.HasExited){throw 'Спочатку відключіть Bridge для зміни дозволу'}
+  $script:cfg=Get-Content -LiteralPath $script:cfgPath -Raw -Encoding UTF8|ConvertFrom-Json
   $p=@($script:cfg.projects|Where-Object {$_.id -eq $script:cfg.project_id})[0]
   $p|Add-Member -NotePropertyName remote_open_enabled -NotePropertyValue ([bool]$remoteOpen.Checked) -Force
   $script:cfg|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $script:cfgPath -Encoding UTF8

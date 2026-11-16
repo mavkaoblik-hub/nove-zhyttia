@@ -1,6 +1,6 @@
 [
   {
-    "sha256": "54b2b8dc097e90648e8fdfb59d7004767dbf366258196a40bf3cd61b5be44438",
+    "sha256": "241e9c7e72e6214e0b309cda7835b0e256fa21566cb22edf3c3bff524078d3b8",
     "name": "agent.ps1"
   },
   {
@@ -44,7 +44,7 @@
     "name": "install-agent.ps1"
   },
   {
-    "sha256": "8fbc8c56359ea519ea5910503745556bd337e5aa29834adcfbf26468c6ac6526",
+    "sha256": "ac899f6b2ed86788cc89b7c644b5d7f68d0e5b1da921a9f114500fc8e14ac6f6",
     "name": "MaVka-Game-Bridge.ps1"
   },
   {
