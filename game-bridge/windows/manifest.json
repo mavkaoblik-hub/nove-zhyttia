@@ -1,0 +1,46 @@
+[
+  {
+    "sha256": "13403b26eff5407ae7000dfb680b12d699f767d90a44467548a0533b55785ee1",
+    "name": "agent.ps1"
+  },
+  {
+    "sha256": "64afdf30a1b7001f430d363cd19fc7df53f7ac65f5f78cba364f7ca48e1f37f3",
+    "name": "approve.ps1"
+  },
+  {
+    "sha256": "e544ffc19bb37c9f41c698f2b38d42894645e92fb4c1d1daeecfd34cd6febc69",
+    "name": "config.example.json"
+  },
+  {
+    "sha256": "79c88d97bdb4745f132145a4430eba8ef8e3f315566c49352ef58d532b52262d",
+    "name": "diagnostics.ps1"
+  },
+  {
+    "sha256": "de2851a27f4a485ac8c31f9a017dce725084b0eb692b67aeea55afa67baebb3d",
+    "name": "inspect_scene.py"
+  },
+  {
+    "sha256": "0af4e8bf2a37ca8fa872a5dc5e3a6ef529f03731f5cda8e282b201837c218217",
+    "name": "install-agent.ps1"
+  },
+  {
+    "sha256": "4aaac3717a0992faa62dc256a75337ee2844258bfb6fd85ab9467aa6046640a2",
+    "name": "MaVka-Game-Bridge.ps1"
+  },
+  {
+    "sha256": "b48fa5539b7199e47a8a0312356906df03e8671cc46ba7aefccc517ce4f9abcc",
+    "name": "smoke.py"
+  },
+  {
+    "sha256": "4a5a3d48fb8eb4cbdde4182b8a4aa61cb61b948830ecc3054aadcb656d57b4d8",
+    "name": "start-bridge.ps1"
+  },
+  {
+    "sha256": "b05544a1f6f600077e62f6b70cfd3d6bdee5bfe9e7cd9dffb5e4fe2235b1a2c8",
+    "name": "stop-agent.ps1"
+  },
+  {
+    "sha256": "af785a672e219bab208661c4288c5d769e23a0d1ee240e5cf88f29b3015765f1",
+    "name": "uninstall-agent.ps1"
+  }
+]
