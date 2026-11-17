@@ -18,7 +18,7 @@ $connect=New-Object Windows.Forms.Button;$connect.Text='Підключити';$c
 $disconnect=New-Object Windows.Forms.Button;$disconnect.Text='Відключити';$disconnect.SetBounds(175,45,150,32)
 $stop=New-Object Windows.Forms.Button;$stop.Text='Зупинити завдання';$stop.SetBounds(335,45,180,32)
 $approve=New-Object Windows.Forms.Button;$approve.Text='Переглянути завдання';$approve.SetBounds(525,45,250,32)
-$auto=New-Object Windows.Forms.CheckBox;$auto.Text='Автосхвалення перевірених дій';$auto.SetBounds(15,90,340,25)
+$auto=New-Object Windows.Forms.CheckBox;$auto.Text='Автосхвалення всіх команд';$auto.SetBounds(15,90,340,25)
 $delayLabel=New-Object Windows.Forms.Label;$delayLabel.Text='Затримка, с:';$delayLabel.SetBounds(365,93,110,22)
 $delay=New-Object Windows.Forms.NumericUpDown;$delay.Minimum=5;$delay.Maximum=300;$delay.Value=15;$delay.SetBounds(480,90,65,25)
 $countdownLabel=New-Object Windows.Forms.Label;$countdownLabel.SetBounds(560,93,215,25);$countdownLabel.Anchor='Top,Right'

@@ -5,7 +5,7 @@
   },
   {
     "name": "approval.ps1",
-    "sha256": "ebed8ff063b055313d7155fc6057d323733a10d4136c5fd0b372c8177444aba1"
+    "sha256": "8684b889c57d3ac86d0dcb5f63584e603af42f97dad6871cac485e569c6d921c"
   },
   {
     "name": "approve.ps1",
@@ -49,7 +49,7 @@
   },
   {
     "name": "MaVka-Game-Bridge.ps1",
-    "sha256": "ac899f6b2ed86788cc89b7c644b5d7f68d0e5b1da921a9f114500fc8e14ac6f6"
+    "sha256": "f6b7b04c36fee8dcd3b577c770f49d0e0d36488ecf224d6cfaef90cb9c052131"
   },
   {
     "name": "pipeline_scene.py",

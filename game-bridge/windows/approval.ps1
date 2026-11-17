@@ -1,31 +1,16 @@
 ﻿function TestAutoApproval($Policy,$Configuration,$Task,[bool]$ProjectAllowed,[string]$ToolRoot) {
  if(-not $ProjectAllowed -or $null -eq $Policy -or -not $Policy.enabled -or $Policy.project_id -ne $Configuration.project_id){return $false}
  if($Policy.delay_seconds -lt 5 -or $Policy.delay_seconds -gt 300){return $false}
- # Typed handlers still validate every project, path, quota, hash and destination.
- if($Task.action -in @('workspace.stage_revision','godot.project.inspect')){return $true}
- if($Task.action -in @('files.push','files.pull','files.publish')){
-  return ($Task.arguments.project_id -eq $Configuration.project_id)
- }
- if($Task.action -eq 'gui.blender.open'){
-  return (@($Configuration.projects|Where-Object {$_.enabled -and $_.id -eq $Task.arguments.project_id -and $_.remote_open_enabled}).Count -eq 1)
- }
- if($Task.action -in @('blender.render','blender.export_gltf')){
-  return ((Get-BridgeFileHash -LiteralPath (Join-Path $ToolRoot 'smoke.py')).Hash -eq $Configuration.smoke_sha256)
- }
- if($Task.action -in @('blender.run_approved_script','godot.tests.headless')){
-  try{
-   $entries=@($Configuration.approved_scripts|Where-Object {$_.id -eq $Task.arguments.script_id -and $_.project_id -eq $Configuration.project_id -and $_.revision_sha -eq $Task.revision_sha -and $_.action -eq $Task.action})
-   if($entries.Count -ne 1){return $false}
-   $path=ResolveResultPath (Join-Path $ToolRoot 'staging') ($Configuration.project_id+'\'+$Task.revision_sha+'\'+$entries[0].relative_path)
-   if((Get-BridgeFileHash -LiteralPath $path).Hash -ne $entries[0].sha256){return $false}
-   if($Task.action -eq 'godot.tests.headless'){return (TestAutoWorkspaceTrust $Configuration $Task $ToolRoot)}
-   return $true
-  }catch{return $false}
- }
- if($Task.action -in @('pipeline.run','godot.project.import','godot.project.validate','godot.preview.capture','gui.godot.editor','gui.godot.run','godot.export')){
-  try{return (TestAutoWorkspaceTrust $Configuration $Task $ToolRoot)}catch{return $false}
- }
- return $false
+ # Owner explicitly authorized all supported actions, including new script registration.
+ # This grants exact-job approval only. Handlers retain scopes, hashes and quotas.
+ return ($Task.action -in @(
+  'system.health','blender.version','godot.version','workspace.status','workspace.results',
+  'workspace.stage_revision','blender.scene.inspect','blender.render','blender.export_gltf',
+  'scripts.register','blender.run_approved_script','godot.tests.headless',
+  'godot.project.inspect','godot.project.import','godot.project.validate','godot.export',
+  'artifact.upload','files.push','files.pull','files.publish','pipeline.run',
+  'gui.blender.open','gui.godot.editor','gui.godot.run','godot.preview.capture'
+ ))
 }
 function WriteActiveState($State,[string]$Path=(Join-Path $PSScriptRoot 'active.json')) {
  $temp=$Path+'.tmp'

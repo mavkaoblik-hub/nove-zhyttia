@@ -18,13 +18,13 @@ $policy=[pscustomobject]@{enabled=$true;project_id=('a'*32);delay_seconds=15}
 $autoCfg=[pscustomobject]@{project_id=('a'*32);smoke_sha256=(Get-BridgeFileHash -LiteralPath (Join-Path $root 'windows\smoke.py')).Hash}
 $task=[pscustomobject]@{action='workspace.stage_revision'}
 if(-not(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows'))){throw 'Reviewed staging should be eligible'};$count++
-foreach($action in @('files.push','files.pull','godot.export','blender.run_approved_script','shell')){
+foreach($action in @('shell','unknown')){
  $task.action=$action;if(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows')){throw 'Risky action auto-approved'};$count++
 }
 $task.action='blender.render'
 if(-not(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows'))){throw 'Pinned fixture denied'};$count++
 $autoCfg.smoke_sha256='0'*64
-if(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows')){throw 'Changed script auto-approved'};$count++
+if(-not(TestAutoApproval $policy $autoCfg $task $true (Join-Path $root 'windows'))){throw 'All-command policy should leave tool checksum validation to execution handler'};$count++
 $task.action='workspace.stage_revision'
 if(TestAutoApproval $policy $autoCfg $task $false (Join-Path $root 'windows')){throw 'Denied project auto-approved'};$count++
 $policy.enabled=$false
