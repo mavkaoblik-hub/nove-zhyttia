@@ -1,94 +1,98 @@
 [
   {
-    "sha256": "241e9c7e72e6214e0b309cda7835b0e256fa21566cb22edf3c3bff524078d3b8",
-    "name": "agent.ps1"
+    "name": "agent.ps1",
+    "sha256": "2f6af9059b55161236dee92967b4afbb64cd9fb782a1553feac7887b20c46553"
   },
   {
-    "sha256": "4947505c9bb6d6a4c5f9e5f6af9df0445fd054a1eddd6c051a800ac1bbc92394",
-    "name": "approval.ps1"
+    "name": "approval.ps1",
+    "sha256": "ebed8ff063b055313d7155fc6057d323733a10d4136c5fd0b372c8177444aba1"
   },
   {
-    "sha256": "704da10a52ef0074510c219bfa5056f7769993c9307d8a678dc1618e27bae90d",
-    "name": "approve.ps1"
+    "name": "approve.ps1",
+    "sha256": "704da10a52ef0074510c219bfa5056f7769993c9307d8a678dc1618e27bae90d"
   },
   {
-    "sha256": "f408b21f701ee9b44ff4d517d8121939b851513384e31a5d71ec11e91c244d14",
-    "name": "bridge_preview.gd"
+    "name": "auto-trust.ps1",
+    "sha256": "5e3ea33f9f8502da83b626baa65bbe06b2374ec96b1fcc99b4c111c3300c4c68"
   },
   {
-    "sha256": "431933db0096af51767e6a2e99e6e9449468f3da70bf5ebb717c2b22d73bccb9",
-    "name": "capture_preview.gd"
+    "name": "bridge_preview.gd",
+    "sha256": "f408b21f701ee9b44ff4d517d8121939b851513384e31a5d71ec11e91c244d14"
   },
   {
-    "sha256": "f9df8c274cfcebefa76d01ef076f783f1116844964f0c3ca5accc2cf893d4c20",
-    "name": "config.example.json"
+    "name": "capture_preview.gd",
+    "sha256": "431933db0096af51767e6a2e99e6e9449468f3da70bf5ebb717c2b22d73bccb9"
   },
   {
-    "sha256": "d430c2739168ce379d926fc72397286745812df68fe3ddd8d10472fa3b103ead",
-    "name": "diagnostics.ps1"
+    "name": "config.example.json",
+    "sha256": "f9df8c274cfcebefa76d01ef076f783f1116844964f0c3ca5accc2cf893d4c20"
   },
   {
-    "sha256": "7cb812f0181caadda59ceb32d82254ebb64c4b9aadb13ac8fce9128d82a007cd",
-    "name": "feedback.ps1"
+    "name": "diagnostics.ps1",
+    "sha256": "d430c2739168ce379d926fc72397286745812df68fe3ddd8d10472fa3b103ead"
   },
   {
-    "sha256": "72089d73f83c139bf41b8f315417a5f081627e99da824e83a703221cf24ce8e7",
-    "name": "hash.ps1"
+    "name": "feedback.ps1",
+    "sha256": "7cb812f0181caadda59ceb32d82254ebb64c4b9aadb13ac8fce9128d82a007cd"
   },
   {
-    "sha256": "de2851a27f4a485ac8c31f9a017dce725084b0eb692b67aeea55afa67baebb3d",
-    "name": "inspect_scene.py"
+    "name": "hash.ps1",
+    "sha256": "72089d73f83c139bf41b8f315417a5f081627e99da824e83a703221cf24ce8e7"
   },
   {
-    "sha256": "00d75b5990f3f25065d8b7cf765a6ce501141dea94db4cdbff5ceb23960edef5",
-    "name": "install-agent.ps1"
+    "name": "inspect_scene.py",
+    "sha256": "de2851a27f4a485ac8c31f9a017dce725084b0eb692b67aeea55afa67baebb3d"
   },
   {
-    "sha256": "ac899f6b2ed86788cc89b7c644b5d7f68d0e5b1da921a9f114500fc8e14ac6f6",
-    "name": "MaVka-Game-Bridge.ps1"
+    "name": "install-agent.ps1",
+    "sha256": "00d75b5990f3f25065d8b7cf765a6ce501141dea94db4cdbff5ceb23960edef5"
   },
   {
-    "sha256": "b7c51a6ac01bc766dce6779cbd5ebd3a4b1aa08315e0dc928e79e70791b9c1bc",
-    "name": "pipeline_scene.py"
+    "name": "MaVka-Game-Bridge.ps1",
+    "sha256": "ac899f6b2ed86788cc89b7c644b5d7f68d0e5b1da921a9f114500fc8e14ac6f6"
   },
   {
-    "sha256": "972468fea3e32b0eb1bc2b75f330c551b95bc92002475e88cc8b28b7cb2b10eb",
-    "name": "pipeline.ps1"
+    "name": "pipeline_scene.py",
+    "sha256": "b7c51a6ac01bc766dce6779cbd5ebd3a4b1aa08315e0dc928e79e70791b9c1bc"
   },
   {
-    "sha256": "a6b08c66be22850a532405194d9b67fc2cb2e03a682b4a1836c9ba023f2a8529",
-    "name": "process-output.ps1"
+    "name": "pipeline.ps1",
+    "sha256": "972468fea3e32b0eb1bc2b75f330c551b95bc92002475e88cc8b28b7cb2b10eb"
   },
   {
-    "sha256": "a96aa84619ee7b01dada86a1fa27307a04698554cc64f5aa555408c054f8d342",
-    "name": "results.ps1"
+    "name": "process-output.ps1",
+    "sha256": "a6b08c66be22850a532405194d9b67fc2cb2e03a682b4a1836c9ba023f2a8529"
   },
   {
-    "sha256": "c0ed15b75d46290c8c5a8c0ab8d6ade3b2ec86da6e24e810c921903b3bd37896",
-    "name": "scripts.ps1"
+    "name": "results.ps1",
+    "sha256": "a96aa84619ee7b01dada86a1fa27307a04698554cc64f5aa555408c054f8d342"
   },
   {
-    "sha256": "b48fa5539b7199e47a8a0312356906df03e8671cc46ba7aefccc517ce4f9abcc",
-    "name": "smoke.py"
+    "name": "scripts.ps1",
+    "sha256": "c0ed15b75d46290c8c5a8c0ab8d6ade3b2ec86da6e24e810c921903b3bd37896"
   },
   {
-    "sha256": "4a5a3d48fb8eb4cbdde4182b8a4aa61cb61b948830ecc3054aadcb656d57b4d8",
-    "name": "start-bridge.ps1"
+    "name": "smoke.py",
+    "sha256": "b48fa5539b7199e47a8a0312356906df03e8671cc46ba7aefccc517ce4f9abcc"
   },
   {
-    "sha256": "b05544a1f6f600077e62f6b70cfd3d6bdee5bfe9e7cd9dffb5e4fe2235b1a2c8",
-    "name": "stop-agent.ps1"
+    "name": "start-bridge.ps1",
+    "sha256": "4a5a3d48fb8eb4cbdde4182b8a4aa61cb61b948830ecc3054aadcb656d57b4d8"
   },
   {
-    "sha256": "74cb3063d761e4f2a115501a329fff74cd29a7c2d41fc63ec025961f51ef5168",
-    "name": "transfer.ps1"
+    "name": "stop-agent.ps1",
+    "sha256": "b05544a1f6f600077e62f6b70cfd3d6bdee5bfe9e7cd9dffb5e4fe2235b1a2c8"
   },
   {
-    "sha256": "af785a672e219bab208661c4288c5d769e23a0d1ee240e5cf88f29b3015765f1",
-    "name": "uninstall-agent.ps1"
+    "name": "transfer.ps1",
+    "sha256": "1bef27a40c2839e64ba3915fc43cf648edada7ae9fdcb54597ebeb25b8ce8bc4"
   },
   {
-    "sha256": "33e4487c99068e806a1f5f088a79aedff938ba888410fda7aa632e2701017393",
-    "name": "update-agent.ps1"
+    "name": "uninstall-agent.ps1",
+    "sha256": "af785a672e219bab208661c4288c5d769e23a0d1ee240e5cf88f29b3015765f1"
+  },
+  {
+    "name": "update-agent.ps1",
+    "sha256": "33e4487c99068e806a1f5f088a79aedff938ba888410fda7aa632e2701017393"
   }
 ]

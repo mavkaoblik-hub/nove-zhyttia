@@ -22,7 +22,7 @@ function AddArchiveFile($Archive,[string]$Name,[string]$Source) {
 }
 function PushProjectFiles([string]$OverrideRoot='',[string[]]$OverrideFiles=@()) {
  if([string]$job.arguments.project_id -ne $cfg.project_id){throw 'Transfer project mismatch'}
- $files=if($OverrideFiles.Count){@($OverrideFiles)}else{@($job.arguments.files)}
+ $files=@(if($OverrideFiles.Count){$OverrideFiles}else{$job.arguments.files})
  if($files.Count -lt 1 -or $files.Count -gt 200){throw 'Select 1 to 200 files'}
  $root=$cfg.source
  if($OverrideRoot){if($OverrideRoot -ne $out){throw 'Internal package root'};$root=$OverrideRoot}

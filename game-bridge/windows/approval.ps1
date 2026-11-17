@@ -1,10 +1,29 @@
 ﻿function TestAutoApproval($Policy,$Configuration,$Task,[bool]$ProjectAllowed,[string]$ToolRoot) {
  if(-not $ProjectAllowed -or $null -eq $Policy -or -not $Policy.enabled -or $Policy.project_id -ne $Configuration.project_id){return $false}
  if($Policy.delay_seconds -lt 5 -or $Policy.delay_seconds -gt 300){return $false}
- # Never auto-approve file export/import/promotion, new code, builds, or arbitrary parameters.
- if($Task.action -eq 'workspace.stage_revision'){return $true}
+ # Typed handlers still validate every project, path, quota, hash and destination.
+ if($Task.action -in @('workspace.stage_revision','godot.project.inspect')){return $true}
+ if($Task.action -in @('files.push','files.pull','files.publish')){
+  return ($Task.arguments.project_id -eq $Configuration.project_id)
+ }
+ if($Task.action -eq 'gui.blender.open'){
+  return (@($Configuration.projects|Where-Object {$_.enabled -and $_.id -eq $Task.arguments.project_id -and $_.remote_open_enabled}).Count -eq 1)
+ }
  if($Task.action -in @('blender.render','blender.export_gltf')){
   return ((Get-BridgeFileHash -LiteralPath (Join-Path $ToolRoot 'smoke.py')).Hash -eq $Configuration.smoke_sha256)
+ }
+ if($Task.action -in @('blender.run_approved_script','godot.tests.headless')){
+  try{
+   $entries=@($Configuration.approved_scripts|Where-Object {$_.id -eq $Task.arguments.script_id -and $_.project_id -eq $Configuration.project_id -and $_.revision_sha -eq $Task.revision_sha -and $_.action -eq $Task.action})
+   if($entries.Count -ne 1){return $false}
+   $path=ResolveResultPath (Join-Path $ToolRoot 'staging') ($Configuration.project_id+'\'+$Task.revision_sha+'\'+$entries[0].relative_path)
+   if((Get-BridgeFileHash -LiteralPath $path).Hash -ne $entries[0].sha256){return $false}
+   if($Task.action -eq 'godot.tests.headless'){return (TestAutoWorkspaceTrust $Configuration $Task $ToolRoot)}
+   return $true
+  }catch{return $false}
+ }
+ if($Task.action -in @('pipeline.run','godot.project.import','godot.project.validate','godot.preview.capture','gui.godot.editor','gui.godot.run','godot.export')){
+  try{return (TestAutoWorkspaceTrust $Configuration $Task $ToolRoot)}catch{return $false}
  }
  return $false
 }
@@ -41,6 +60,7 @@ function WaitLocalApproval([string]$Receipt) {
   Start-Sleep -Seconds 1
  }
  if((Get-Content -LiteralPath $approval -Raw -Encoding UTF8).Trim() -ne $expected){throw 'Approval hash mismatch'}
+ if($mode -eq 'manual'){SaveAutoWorkspaceTrust $cfg $job $PSScriptRoot}
  WriteActiveState @{job_id=$job.job_id;action=$job.action;phase='running'}
  return @{mode=$mode;policy_sha256=$policyHash}
 }

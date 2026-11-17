@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'pipeline.ps1')
 . (Join-Path $PSScriptRoot 'scripts.ps1')
 . (Join-Path $PSScriptRoot 'feedback.ps1')
+. (Join-Path $PSScriptRoot 'auto-trust.ps1')
 $ErrorActionPreference='Stop'
 $cfg=Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($cfg.gateway -ne 'http://127.0.0.1:18774') { throw 'Only the local pinned SSH forwarding endpoint is permitted' }
