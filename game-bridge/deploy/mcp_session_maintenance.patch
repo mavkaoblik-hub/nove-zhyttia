@@ -1,0 +1,136 @@
+--- a/http_server.py
++++ b/http_server.py
+@@ -25,7 +25,7 @@
+ MAX_BODY = 2 * 1024 * 1024
+ MAX_TOKEN = 16384
+ PROTOCOLS = {'2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'}
+-VERSION = '0.3.1'
++VERSION = '0.3.3'
+ 
+ 
+ class NotConfigured(Exception):
+@@ -124,49 +124,95 @@
+ 
+ 
+ class Sessions:
+-    def __init__(self):
++    MAX_SESSIONS = 128
++    TTL = 3600
++
++    def __init__(self, status_path=None):
+         self.items = {}
+         self.lock = threading.Lock()
++        self.status_path = Path(status_path) if status_path else None
++        self.created_total = 0
++        self._publish()
++
++    def _publish(self):
++        if self.status_path is None:
++            return
++        data = {'pid': os.getpid(), 'current': len(self.items),
++                'created_since_reset': self.created_total,
++                'active_calls': sum(v['active'] for v in self.items.values()),
++                'limit': self.MAX_SESSIONS}
++        try:
++            if self.status_path.is_symlink():
++                return
++            temp = self.status_path.with_name(self.status_path.name + '.tmp')
++            with open(temp, 'w', opener=lambda path, flags: os.open(path, flags | os.O_NOFOLLOW, 0o600)) as stream:
++                json.dump(data, stream)
++            os.replace(temp, self.status_path)
++        except OSError:
++            pass  # Counter persistence must never break authentication or tools.
++
+ 
+     def create(self, owner):
+         with self.lock:
+             now = time.monotonic()
+-            self.items = {key: value for key, value in self.items.items() if now - value['created'] < 3600}
+-            if len(self.items) >= 128:
+-                raise Denied()
++            self.items = {key: value for key, value in self.items.items()
++                          if value['active'] or now - value['created'] < self.TTL}
++            if len(self.items) >= self.MAX_SESSIONS:
++                # Capacity is a memory bound, not a one-hour connection quota.
++                # Never evict an executing call or another authenticated owner.
++                candidates = [(v['used'], k) for k, v in self.items.items()
++                              if v['owner'] == owner and not v['active']]
++                if not candidates:
++                    raise Denied()
++                del self.items[min(candidates)[1]]
+             session = secrets.token_urlsafe(32)
+-            self.items[session] = {'owner': owner, 'created': now, 'ids': set()}
++            self.items[session] = {'owner': owner, 'created': now,
++                                   'used': now, 'active': 0, 'ids': set()}
++            self.created_total += 1
++            self._publish()
+             return session
+ 
+     def check(self, session, owner, call_id=None, reserve=False):
+         with self.lock:
+             item = self.items.get(session)
+-            if not item or item['owner'] != owner or time.monotonic() - item['created'] >= 3600:
++            now = time.monotonic()
++            if not item or item['owner'] != owner or now - item['created'] >= self.TTL:
+                 raise Denied()
+             if reserve:
+                 key = json.dumps(call_id)
+                 if key in item['ids'] or len(item['ids']) >= 512:
+                     raise ValueError('Request ID already used or session exhausted; inspect state before retrying')
+                 item['ids'].add(key)
++                item['active'] += 1
++            item['used'] = now
++            self._publish()
++
++    def finish(self, session, owner):
++        with self.lock:
++            item = self.items.get(session)
++            if item and item['owner'] == owner:
++                item['active'] = max(0, item['active'] - 1)
++                self._publish()
+ 
+     def remove(self, session, owner):
+         with self.lock:
+             item = self.items.get(session)
+             if item and item['owner'] == owner:
+                 del self.items[session]
++                self._publish()
+ 
+ 
+ class Server(ThreadingHTTPServer):
+     daemon_threads = True
+     request_queue_size = 16
+ 
+-    def __init__(self, address, config, core, verifier=None):
++    def __init__(self, address, config, core, verifier=None, session_status_path=None):
+         if address[0] != '127.0.0.1':
+             raise ValueError('Loopback binding required')
+         self.config = config
+         self.verifier = verifier or AccessVerifier(config)
+         self.core = core
+-        self.sessions = Sessions()
++        self.sessions = Sessions(status_path=session_status_path)
+         self.work = threading.BoundedSemaphore(2)
+         self.connections = threading.BoundedSemaphore(16)
+         super().__init__(address, Handler)
+@@ -338,7 +384,10 @@
+                 except (ValueError, Denied):
+                     self.send(409, {'error': 'DUPLICATE_OR_INVALID_REQUEST'})
+                     return
+-                response = self.server.core.dispatch(request)
++                try:
++                    response = self.server.core.dispatch(request)
++                finally:
++                    self.server.sessions.finish(session, owner)
+             finally:
+                 self.server.work.release()
+         elif method == 'tools/list':
+@@ -372,7 +421,7 @@
+     os.umask(0o077)
+     config = json.loads(Path('/etc/oracle-vm-work/access.json').read_text())
+     core = load_core('/opt/oracle-vm-work/releases/0.2.0/mcp_server.py')
+-    with Server(('127.0.0.1', 7320), config, core) as server:
++    with Server(('127.0.0.1', 7320), config, core, session_status_path='/home/ubuntu/.local/state/oracle-vm-work/https-sessions-status.json') as server:
+         server.serve_forever()
+ 
+ 

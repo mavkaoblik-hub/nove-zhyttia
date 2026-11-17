@@ -3,6 +3,8 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 . (Join-Path $PSScriptRoot 'results.ps1')
+. (Join-Path $PSScriptRoot 'process-output.ps1')
+. (Join-Path $PSScriptRoot 'maintenance.ps1')
 $ErrorActionPreference='Stop'
 $appMutex=New-Object Threading.Mutex($false,'Local\MaVkaGameBridgeUI')
 if(-not $appMutex.WaitOne(0)){[Windows.Forms.MessageBox]::Show('MaVka Game Bridge вже відкрита.')|Out-Null;$appMutex.Dispose();exit}
@@ -68,7 +70,32 @@ $remoteOpen.Add_CheckedChanged({
 })
 $openNote=New-Object Windows.Forms.Label;$openNote.Dock='Fill';$openNote.Text='Відкриваються лише результати та staging дозволених проєктів. Blender запускається без autoexec. Godot виконує код обраного staging-проєкту. Оригінали не підміняються.'
 $openTab.Controls.Add($openNote);$openTab.Controls.Add($resultButtons);$openTab.Controls.Add($resultChoice)
-$tabs.TabPages.AddRange(@($journalTab,$renderTab,$detailsTab,$openTab));$form.Controls.Add($tabs)
+$maintenanceTab=New-Object Windows.Forms.TabPage;$maintenanceTab.Text='Обслуговування'
+$maintenanceButtons=New-Object Windows.Forms.FlowLayoutPanel;$maintenanceButtons.Dock='Top';$maintenanceButtons.Height=80
+$refreshSessions=New-Object Windows.Forms.Button;$refreshSessions.Text='Оновити лічильник';$refreshSessions.Width=180;$refreshSessions.Height=32
+$resetSessions=New-Object Windows.Forms.Button;$resetSessions.Text='Скинути сесії та лічильник';$resetSessions.Width=240;$resetSessions.Height=32
+$clearJournal=New-Object Windows.Forms.Button;$clearJournal.Text='Очистити журнал';$clearJournal.Width=170;$clearJournal.Height=32
+$maintenanceButtons.Controls.AddRange(@($refreshSessions,$resetSessions,$clearJournal))
+$sessionLabel=New-Object Windows.Forms.Label;$sessionLabel.Dock='Fill';$sessionLabel.Padding=New-Object Windows.Forms.Padding(10);$sessionLabel.Text="MCP-сесії: ще не перевірено.`r`nНатисніть «Оновити лічильник».`r`n`r`nСкидання очищує лише хмарні MCP-сесії та їхній лічильник. Працює через SSH навіть при SESSION_LIMIT. Завдання гри й VPN не перезапускаються.`r`nЖурнал архівується; файли результатів і журнали самих завдань зберігаються."
+$maintenanceTab.Controls.Add($sessionLabel);$maintenanceTab.Controls.Add($maintenanceButtons)
+$tabs.TabPages.AddRange(@($journalTab,$renderTab,$detailsTab,$openTab,$maintenanceTab));$form.Controls.Add($tabs)
+$script:maintenanceJob=$null
+function BeginMaintenance([string]$Operation) {
+ try{
+  if($script:maintenanceJob){return}
+  $configuration=Get-Content -LiteralPath $script:cfgPath -Raw -Encoding UTF8|ConvertFrom-Json
+  $script:maintenanceJob=StartMcpMaintenance $configuration $Operation
+  $refreshSessions.Enabled=$false;$resetSessions.Enabled=$false
+  $sessionLabel.Text=if($Operation -eq 'reset'){'Скидання MCP-сесій через SSH...'}else{'Отримання лічильника MCP-сесій через SSH...'}
+  AppLog ('mcp_'+$Operation+'_requested')
+ }catch{$sessionLabel.Text=$_.Exception.Message;AppLog ('mcp_'+$Operation+'_failed')}
+}
+$refreshSessions.Add_Click({BeginMaintenance 'status'})
+$resetSessions.Add_Click({BeginMaintenance 'reset'})
+$clearJournal.Add_Click({
+ try{$saved=ClearBridgeJournal $PSScriptRoot;$log.Clear();AppLog 'journal_cleared';$sessionLabel.Text='Журнал очищено. Архів: '+$saved.archive}
+ catch{$sessionLabel.Text='Не вдалося очистити журнал: '+$_.Exception.Message}
+})
 $script:resultEntries=@{}
 $refreshResults.Add_Click({
  try{$script:resultEntries=@{};$resultChoice.Items.Clear()
@@ -194,6 +221,17 @@ $timer.Add_Tick({
  try{
   $exitRequest=Join-Path $PSScriptRoot 'EXIT'
   if(Test-Path -LiteralPath $exitRequest){Remove-Item -LiteralPath $exitRequest -Force;$form.Close();return}
+  if($script:maintenanceJob){
+   try{
+    $answer=ReceiveMcpMaintenance $script:maintenanceJob
+    if($answer){
+     $sessionLabel.Text='MCP-сесії: '+$answer.current+' / '+$answer.limit+"`r`nСтворено після останнього скидання: "+$answer.created_since_reset+"`r`nКоманд виконується: "+$answer.active_calls+"`r`nОновлено: "+[DateTime]::Now.ToString('dd.MM.yyyy HH:mm:ss')
+     AppLog ('mcp_'+$script:maintenanceJob.operation+'_succeeded current='+$answer.current+' total='+$answer.created_since_reset)
+     $script:maintenanceJob.process.Dispose();$script:maintenanceJob=$null
+    }
+   }catch{$sessionLabel.Text=$_.Exception.Message;AppLog 'mcp_maintenance_failed';$script:maintenanceJob.process.Dispose();$script:maintenanceJob=$null}
+   if(-not $script:maintenanceJob){$refreshSessions.Enabled=$true;$resetSessions.Enabled=$true}
+  }
   $running=$script:process -and -not $script:process.HasExited
   if(([DateTime]::UtcNow-$script:lastOutputScan).TotalSeconds -ge 5){
    $script:lastOutputScan=[DateTime]::UtcNow
@@ -256,6 +294,7 @@ $form.Add_FormClosing({param($sender,$e)
   DisconnectBridge
   if(-not $script:process.WaitForExit(20000)){$e.Cancel=$true;ShowError 'Агент ще завершує завдання. Зачекайте й закрийте вікно повторно.';return}
  }
+ if($script:maintenanceJob){if(-not $script:maintenanceJob.process.HasExited){$script:maintenanceJob.process.Kill()};$script:maintenanceJob.process.Dispose();$script:maintenanceJob=$null}
  $timer.Stop();$tray.Visible=$false;AppLog 'application_closed'
 })
 try{[Windows.Forms.Application]::Run($form)}finally{if($picture.Image){$picture.Image.Dispose()};$timer.Dispose();$tray.Dispose();$form.Dispose();if($script:process){$script:process.Dispose()};$appMutex.ReleaseMutex();$appMutex.Dispose()}
