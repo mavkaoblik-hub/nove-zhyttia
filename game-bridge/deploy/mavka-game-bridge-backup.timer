@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily private Game Bridge backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Europe/Kyiv
+Persistent=true
+RandomizedDelaySec=10m
+Unit=mavka-game-bridge-backup.service
+
+[Install]
+WantedBy=timers.target

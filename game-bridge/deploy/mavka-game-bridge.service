@@ -1,0 +1,36 @@
+[Unit]
+Description=MaVka Game Bridge private Gateway
+After=network-online.target wg-quick@wg0.service
+Requires=wg-quick@wg0.service
+
+[Service]
+User=mavka-game-bridge
+Group=mavka-game-bridge
+ExecStart=/usr/bin/python3 -I /opt/mavka-game-bridge/current/bridge.py --host 10.77.0.1 --port 18773 --allow 10.77.0.2 --allow 10.77.0.1 --state /var/lib/mavka-game-bridge --credentials /etc/mavka-game-bridge/credentials.json
+Restart=on-failure
+RestartSec=5
+StateDirectory=mavka-game-bridge
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=256M
+CPUQuota=50%
+TasksMax=32
+LimitNOFILE=128
+IPAddressDeny=any
+IPAddressAllow=10.77.0.2/32
+IPAddressAllow=10.77.0.1/32
+ReadWritePaths=/var/lib/mavka-game-bridge
+
+[Install]
+WantedBy=multi-user.target
